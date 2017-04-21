@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/etix/mirrorbits/core"
+	"github.com/xbmc/mirrorbits/core"
 	"github.com/op/go-logging"
 	"gopkg.in/yaml.v2"
 )
@@ -27,9 +27,12 @@ var (
 		RedisAddress:           "127.0.0.1:6379",
 		RedisPassword:          "",
 		RedisDB:                0,
-		LogDir:                 "",
+		AccessLog:              "access.log",
+		ErrorLog:               "", // stderr
+		LogLevel:               "INFO",
 		TraceFileLocation:      "",
 		GeoipDatabasePath:      "/usr/share/GeoIP/",
+		DownloadStatsPath:      "",
 		ConcurrentSync:         2,
 		ScanInterval:           30,
 		CheckInterval:          1,
@@ -44,6 +47,14 @@ var (
 		WeightDistributionRange: 1.5,
 		DisableOnMissingFile:    false,
 		GoogleMapsAPIKey:        "",
+		UserAgentStatsConf: uaconf{
+			LogUnknown:           false,
+			CountOnlySpecialPath: false,
+			BrowsersWithVersion:  []string{},
+			CheckEngines:         []string{},
+			BlockedUserAgents:    []string{},
+			CountSpecialPath:     "",
+		},
 	}
 	config      *Configuration
 	configMutex sync.RWMutex
@@ -61,7 +72,9 @@ type Configuration struct {
 	RedisAddress            string     `yaml:"RedisAddress"`
 	RedisPassword           string     `yaml:"RedisPassword"`
 	RedisDB                 int        `yaml:"RedisDB"`
-	LogDir                  string     `yaml:"LogDir"`
+	AccessLog               string     `yaml:"AccessLog"`
+	ErrorLog                string     `yaml:"ErrorLog"`
+	LogLevel                string     `yaml:"LogLevel"`
 	TraceFileLocation       string     `yaml:"TraceFileLocation"`
 	GeoipDatabasePath       string     `yaml:"GeoipDatabasePath"`
 	ConcurrentSync          int        `yaml:"ConcurrentSync"`
@@ -74,6 +87,8 @@ type Configuration struct {
 	WeightDistributionRange float32    `yaml:"WeightDistributionRange"`
 	DisableOnMissingFile    bool       `yaml:"DisableOnMissingFile"`
 	Fallbacks               []fallback `yaml:"Fallbacks"`
+	DownloadStatsPath       string     `yaml:"DownloadStatsPath"`
+	UserAgentStatsConf      uaconf     `yaml:"UserAgentStatsConf"`
 
 	RedisSentinelMasterName string      `yaml:"RedisSentinelMasterName"`
 	RedisSentinels          []sentinels `yaml:"RedisSentinels"`
@@ -95,6 +110,15 @@ type hashing struct {
 	SHA1   bool `yaml:"SHA1"`
 	SHA256 bool `yaml:"SHA256"`
 	MD5    bool `yaml:"MD5"`
+}
+
+type uaconf struct {
+	LogUnknown           bool     `yaml:"LogUnknown"`
+	CountOnlySpecialPath bool     `yaml:"CountOnlySpecialPath"`
+	BrowsersWithVersion  []string `yaml:"BrowsersWithVersion"`
+	CheckEngines         []string `yaml:"CheckEngines"`
+	BlockedUserAgents    []string `yaml:"BlockedUserAgents"`
+	CountSpecialPath     string   `yaml:"CountSpecialPath"`
 }
 
 // LoadConfig loads the configuration file if it has not yet been loaded
@@ -186,6 +210,13 @@ func GetConfig() *Configuration {
 // SetConfiguration is only used for testing purpose
 func SetConfiguration(c *Configuration) {
 	config = c
+}
+
+func SafeGetConfig() *Configuration {
+	defer func() {
+		if err := recover(); err != nil {}
+	}()
+	return GetConfig()
 }
 
 func SubscribeConfig(subscriber chan bool) {

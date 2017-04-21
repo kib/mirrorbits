@@ -15,16 +15,25 @@ import (
 	"sync"
 	"time"
 
-	. "github.com/etix/mirrorbits/config"
-	"github.com/etix/mirrorbits/core"
-	"github.com/etix/mirrorbits/mirrors"
+	. "github.com/xbmc/mirrorbits/config"
+	"github.com/xbmc/mirrorbits/core"
+	"github.com/xbmc/mirrorbits/mirrors"
 	"github.com/op/go-logging"
 )
 
 var (
-	log     = logging.MustGetLogger("main")
-	rlogger runtimeLogger
-	dlogger downloadsLogger
+	log          = logging.MustGetLogger("main")
+	rlogger      runtimeLogger
+	dlogger      downloadsLogger
+	loglevel     logging.Level
+	nameToLevels = map[string]logging.Level{
+		"CRITICAL": logging.CRITICAL,
+		"ERROR":    logging.ERROR,
+		"WARNING":  logging.WARNING,
+		"NOTICE":   logging.NOTICE,
+		"INFO":     logging.INFO,
+		"DEBUG":    logging.DEBUG,
+	}
 )
 
 type runtimeLogger struct {
@@ -63,18 +72,27 @@ func isTerminal(f *os.File) bool {
 
 func ReloadRuntimeLogs() {
 	if rlogger.f == os.Stderr && core.RunLog == "" {
-		// Logger already set up and connected to the console.
-		// Don't reload to avoid breaking journald.
-		return
+		if SafeGetConfig() == nil || GetConfig().ErrorLog == "" {
+			// Logger already set up and connected to the console.
+			// Don't reload to avoid breaking journald.
+			return
+		}
 	}
 
 	if rlogger.f != nil && rlogger.f != os.Stderr {
 		rlogger.f.Close()
 	}
 
+	runlog := ""
 	if core.RunLog != "" {
+		runlog = core.RunLog
+	} else if SafeGetConfig() != nil {
+		runlog = GetConfig().ErrorLog
+	}
+
+	if runlog != "" {
 		var err error
-		rlogger.f, _, err = openLogFile(core.RunLog)
+		rlogger.f, _, err = openLogFile(runlog)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "Cannot open log file for writing")
 			rlogger.f = os.Stderr
@@ -92,8 +110,13 @@ func ReloadRuntimeLogs() {
 		logging.SetFormatter(logging.MustStringFormatter("%{shortfile:-20s}%{time:2006/01/02 15:04:05.000 MST} %{message}"))
 		logging.SetLevel(logging.DEBUG, "main")
 	} else {
+		loglevel = logging.INFO
+		if SafeGetConfig() != nil {
+			loglevel = nameToLevels[GetConfig().LogLevel]
+		}
 		logging.SetFormatter(logging.MustStringFormatter("%{time:2006/01/02 15:04:05.000 MST} %{message}"))
-		logging.SetLevel(logging.INFO, "main")
+		logging.SetLevel(loglevel, "main")
+		log.Critical("LogLevel set to: %s", logging.GetLevel("main"))
 	}
 }
 
@@ -132,11 +155,11 @@ func ReloadDownloadLogs() {
 
 	dlogger.Close()
 
-	if GetConfig().LogDir == "" {
+	if GetConfig().AccessLog == "" {
 		return
 	}
 
-	logfile := GetConfig().LogDir + "/downloads.log"
+	logfile := GetConfig().AccessLog
 	f, createHeader, err := openLogFile(logfile)
 	if err != nil {
 		log.Criticalf("Cannot open log file %s", logfile)
@@ -147,7 +170,7 @@ func ReloadDownloadLogs() {
 }
 
 // This function will write a download result in the logs.
-func LogDownload(typ string, statuscode int, p *mirrors.Results, err error) {
+func LogDownload(typ string, statuscode int, p *mirrors.Results, err error, ua string) {
 	dlogger.RLock()
 	defer dlogger.RUnlock()
 
@@ -175,8 +198,8 @@ func LogDownload(typ string, statuscode int, p *mirrors.Results, err error) {
 			sameASNum = "same"
 		}
 
-		dlogger.l.Printf("%s %d \"%s\" ip:%s mirror:%s%s %sasn:%d distance:%skm countries:%s",
-			typ, statuscode, p.FileInfo.Path, p.IP, m.ID, fallback, sameASNum, m.Asnum, distance, countries)
+		dlogger.l.Printf("%s %d \"%s\" ip:%s mirror:%s%s %sasn:%d distance:%skm countries:%s useragent:%s",
+			typ, statuscode, p.FileInfo.Path, p.IP, m.ID, fallback, sameASNum, m.Asnum, distance, countries, ua)
 	} else if statuscode == 404 && p != nil {
 		dlogger.l.Printf("%s 404 \"%s\" ip:%s", typ, p.FileInfo.Path, p.IP)
 	} else if statuscode == 500 && p != nil {

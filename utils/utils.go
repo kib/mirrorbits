@@ -7,11 +7,12 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
-	"github.com/etix/mirrorbits/core"
-	"github.com/etix/mirrorbits/network"
+	"github.com/xbmc/mirrorbits/core"
+	"github.com/xbmc/mirrorbits/network"
 )
 
 const (
@@ -221,4 +222,30 @@ func FuzzyTimeStr(duration time.Duration) string {
 	}
 
 	return fmt.Sprintf("%d day%s ago", int(hours/24), Plural(int(hours/24)))
+}
+
+// Int64 Sort utility functions
+// Copyright (c) 2014 The sortutil Authors, https://github.com/cznic/sortutil/blob/master/sortutil.go#L144
+
+// Int64Slice attaches the methods of sort.Interface to []int64
+type Int64Slice []int64
+
+func (s Int64Slice) Len() int {
+	return len(s)
+}
+
+func (s Int64Slice) Less(i, j int) bool {
+	return s[i] < s[j]
+}
+
+func (s Int64Slice) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
+func (s Int64Slice) Sort() {
+	sort.Sort(s)
+}
+
+func (s Int64Slice) Reverse() {
+	sort.Sort(sort.Reverse(s))
 }

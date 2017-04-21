@@ -13,8 +13,8 @@ import (
 	"strconv"
 	"strings"
 
-	. "github.com/etix/mirrorbits/config"
-	"github.com/etix/mirrorbits/mirrors"
+	. "github.com/xbmc/mirrorbits/config"
+	"github.com/xbmc/mirrorbits/mirrors"
 )
 
 var (
